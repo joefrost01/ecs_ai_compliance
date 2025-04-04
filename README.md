@@ -88,8 +88,6 @@ Navigation:
 
 The system is designed to demonstrate the theoretical limits of compliance rule processing. In a real-world implementation, additional factors like database writes, API calls, and network latency would impact performance.
 
-On a MacBook Pro M2-Max, the system processes an AI compliance event in approximately 14 nanoseconds - less time than it takes light to travel across a room!
-
 ## Project Structure
 
 ```
