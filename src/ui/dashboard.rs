@@ -9,12 +9,14 @@ use tui::{
     Terminal,
 };
 
-// Dashboard commands
+/// Commands that can be sent to update the dashboard state.
 pub enum DashboardCommand {
+    /// Update the displayed metrics.
     UpdateMetrics(ComplianceMetrics),
 }
 
-// Dashboard tabs
+/// Enumeration of dashboard tabs.
+#[derive(Debug)]
 pub enum DashboardTab {
     Overview,
     Services,
@@ -23,7 +25,8 @@ pub enum DashboardTab {
 }
 
 impl DashboardTab {
-    fn index(&self) -> usize {
+    /// Returns the index of the current tab.
+    pub fn index(&self) -> usize {
         match self {
             DashboardTab::Overview => 0,
             DashboardTab::Services => 1,
@@ -33,6 +36,7 @@ impl DashboardTab {
     }
 }
 
+/// The main dashboard structure holding metrics and UI state.
 pub struct Dashboard {
     pub metrics: ComplianceMetrics,
     pub active_tab: DashboardTab,
@@ -40,6 +44,7 @@ pub struct Dashboard {
 }
 
 impl Dashboard {
+    /// Creates a new instance of the Dashboard.
     pub fn new() -> Self {
         Dashboard {
             metrics: ComplianceMetrics::default(),
@@ -48,12 +53,14 @@ impl Dashboard {
         }
     }
 
+    /// Handles an incoming command to update the dashboard.
     pub fn handle_command(&mut self, cmd: DashboardCommand) {
         match cmd {
             DashboardCommand::UpdateMetrics(metrics) => self.metrics = metrics,
         }
     }
 
+    /// Processes a key event to update the UI (tab switching, quitting, etc.).
     pub fn handle_key_event(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
@@ -62,7 +69,7 @@ impl Dashboard {
             KeyCode::Char('3') => self.active_tab = DashboardTab::Compliance,
             KeyCode::Char('4') => self.active_tab = DashboardTab::Risk,
             KeyCode::Tab => {
-                // Cycle through tabs
+                // Cycle through tabs in order.
                 self.active_tab = match self.active_tab {
                     DashboardTab::Overview => DashboardTab::Services,
                     DashboardTab::Services => DashboardTab::Compliance,
@@ -74,21 +81,21 @@ impl Dashboard {
         }
     }
 
+    /// Renders the dashboard UI.
     pub fn render<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
         terminal.draw(|f| {
             let size = f.size();
-
-            // Create main layout with tabs and content area
+            // Layout: first row for tabs, remaining for content.
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .margin(1)
                 .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
                 .split(size);
 
-            // Render tab bar - fix: borrow TAB_NAMES with &
+            // Render the tab bar.
             render_tabs(f, chunks[0], &TAB_NAMES, self.active_tab.index());
 
-            // Render content based on active tab
+            // Render content based on the active tab.
             match self.active_tab {
                 DashboardTab::Overview => self.render_overview_tab(f, chunks[1]),
                 DashboardTab::Services => self.render_services_tab(f, chunks[1]),
@@ -96,12 +103,11 @@ impl Dashboard {
                 DashboardTab::Risk => self.render_risk_tab(f, chunks[1]),
             }
         })?;
-
         Ok(())
     }
 
+    /// Renders the overview tab: gauge, stats, and charts.
     fn render_overview_tab<B: Backend>(&self, f: &mut tui::Frame<B>, area: Rect) {
-        // Split the area into sections
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(
@@ -110,14 +116,14 @@ impl Dashboard {
                     Constraint::Percentage(40),
                     Constraint::Percentage(40),
                 ]
-                    .as_ref(),
+                .as_ref(),
             )
             .split(area);
 
-        // Top section - compliance gauge
+        // Top: overall compliance gauge.
         render_compliance_gauge(f, chunks[0], &self.metrics);
 
-        // Middle section - stats and service chart
+        // Middle: stats and service chart.
         let middle_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
@@ -126,52 +132,34 @@ impl Dashboard {
         render_stats(f, middle_chunks[0], &self.metrics);
         render_service_chart(f, middle_chunks[1], &self.metrics);
 
-        // Bottom section - processing rate chart
+        // Bottom: processing rate history.
         render_rate_chart(f, chunks[2], &self.metrics);
     }
 
+    /// Renders the services tab with charts for service and department usage.
     fn render_services_tab<B: Backend>(&self, f: &mut tui::Frame<B>, area: Rect) {
-        // Split the area into sections
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Constraint::Percentage(50),
-                    Constraint::Percentage(50),
-                ]
-                    .as_ref(),
-            )
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
             .split(area);
 
-        // Top section - service chart
         render_service_chart(f, chunks[0], &self.metrics);
-
-        // Bottom section - department chart
         render_department_chart(f, chunks[1], &self.metrics);
     }
 
+    /// Renders the compliance tab with gauge and violations chart.
     fn render_compliance_tab<B: Backend>(&self, f: &mut tui::Frame<B>, area: Rect) {
-        // Split the area into sections
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Constraint::Percentage(30),
-                    Constraint::Percentage(70),
-                ]
-                    .as_ref(),
-            )
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
             .split(area);
 
-        // Top section - compliance gauge
         render_compliance_gauge(f, chunks[0], &self.metrics);
-
-        // Bottom section - violation bar chart instead of line chart
         render_violation_chart(f, chunks[1], &self.metrics);
     }
 
+    /// Renders the risk tab with stats and risk charts.
     fn render_risk_tab<B: Backend>(&self, f: &mut tui::Frame<B>, area: Rect) {
-        // Split the area into sections
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(
@@ -180,17 +168,12 @@ impl Dashboard {
                     Constraint::Percentage(33),
                     Constraint::Percentage(34),
                 ]
-                    .as_ref(),
+                .as_ref(),
             )
             .split(area);
 
-        // Top section - risk statistics
         render_stats(f, chunks[0], &self.metrics);
-
-        // Middle section - risk factors bar chart
         render_risk_factors(f, chunks[1], &self.metrics);
-
-        // Bottom section - risk distribution (using the previously unused method)
         render_risk_distribution(f, chunks[2], &self.metrics);
     }
 }
