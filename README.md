@@ -26,7 +26,7 @@ This project demonstrates how Entity Component System (ECS) architecture, tradit
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/joefrost01/ai-compliance-monitor.git
+git clone https://github.com/joefrost01/ecs_ai_compliance.git
 cd ai-compliance-monitor
 ```
 
