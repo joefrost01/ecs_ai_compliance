@@ -6,6 +6,7 @@ use hecs::World;
 use rand::{rng, Rng};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// Generates AI events as a vector of (AIService, Usage) tuples.
 ///
@@ -194,13 +195,34 @@ pub fn collect_metrics(world: &World) -> ComplianceMetrics {
 /// * `metrics_sender` - Channel sender for reporting metrics.
 pub fn worker_thread(
     events_per_batch: usize,
+    events_per_second: u32,
     stop_signal: Arc<AtomicBool>,
     metrics_sender: Sender<ComplianceMetrics>,
 ) {
     let mut world = World::new();
     let mut thread_metrics = ComplianceMetrics::default();
     let mut batch_count = 0;
+
+    // Calculate time per batch (in milliseconds)
+    let batch_time_ms = if events_per_second > 0 && events_per_batch > 0 {
+        (1000.0 * events_per_batch as f64 / events_per_second as f64) as u64
+    } else {
+        1000 // Default to 1 batch per second if rate is 0
+    };
+
+    // Use a longer reporting interval to reduce channel communication overhead
+    let reporting_batches = 20;
+
+    let mut next_batch_time = Instant::now();
+
     while !stop_signal.load(Ordering::Relaxed) {
+        // Wait until the scheduled time for this batch
+        let now = Instant::now();
+        if now < next_batch_time {
+            std::thread::sleep(next_batch_time.duration_since(now));
+        }
+
+        // Process a batch of events
         let events = generate_ai_events(events_per_batch);
         for (ai_service, usage) in events {
             let compliance = ComplianceStatus {
@@ -208,22 +230,36 @@ pub fn worker_thread(
             };
             world.spawn((ai_service, usage, compliance));
         }
+
+        // Run compliance systems
         eu_ai_act_system(&mut world);
         gdpr_system(&mut world);
         internal_policy_system(&mut world);
         risk_assessment_system(&mut world);
+
+        // Collect metrics
         let batch_metrics = collect_metrics(&world);
         thread_metrics.merge(&batch_metrics);
+
+        // Clear world for next batch to free memory
+        world.clear();
+
+        // Schedule next batch
+        next_batch_time += Duration::from_millis(batch_time_ms);
+
+        // Send metrics less frequently to reduce overhead
         batch_count += 1;
-        if batch_count % 10 == 0 {
-            if let Err(e) = metrics_sender.send(thread_metrics.clone()) {
-                eprintln!("Error sending metrics: {:?}", e);
+        if batch_count % reporting_batches == 0 {
+            if let Err(_) = metrics_sender.try_send(thread_metrics.clone()) {
+                // Using try_send to avoid blocking if channel is full
+                // Just silently discard if full - metrics will be updated next time
             }
             thread_metrics = ComplianceMetrics::default();
         }
-        world.clear();
     }
+
+    // Send remaining metrics
     if thread_metrics.total_events > 0 {
-        let _ = metrics_sender.send(thread_metrics);
+        let _ = metrics_sender.try_send(thread_metrics);
     }
 }

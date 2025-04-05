@@ -3,6 +3,7 @@ use crate::metrics::ComplianceMetrics;
 use crate::ui::widgets::*;
 use crossterm::event::{KeyCode, KeyEvent};
 use std::io;
+use std::time::Instant;
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -83,19 +84,31 @@ impl Dashboard {
 
     /// Renders the dashboard UI.
     pub fn render<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
+        // Only redraw every ~250ms to reduce CPU usage
+        let now = Instant::now();
+        static mut LAST_RENDER: Option<Instant> = None;
+
+        unsafe {
+            if let Some(last) = LAST_RENDER {
+                if now.duration_since(last).as_millis() < 250 {
+                    // Skip this render cycle
+                    return Ok(());
+                }
+            }
+            LAST_RENDER = Some(now);
+        }
+
         terminal.draw(|f| {
+            // Rest of rendering code unchanged
             let size = f.size();
-            // Layout: first row for tabs, remaining for content.
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .margin(1)
                 .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
                 .split(size);
 
-            // Render the tab bar.
             render_tabs(f, chunks[0], &TAB_NAMES, self.active_tab.index());
 
-            // Render content based on the active tab.
             match self.active_tab {
                 DashboardTab::Overview => self.render_overview_tab(f, chunks[1]),
                 DashboardTab::Services => self.render_services_tab(f, chunks[1]),
@@ -103,6 +116,7 @@ impl Dashboard {
                 DashboardTab::Risk => self.render_risk_tab(f, chunks[1]),
             }
         })?;
+
         Ok(())
     }
 
