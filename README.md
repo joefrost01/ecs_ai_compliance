@@ -11,7 +11,7 @@ This project demonstrates how Entity Component System (ECS) architecture, tradit
 - **Ultra-high performance**: Processes 90+ million AI service usage events per second on M2-Max
 - **ECS architecture**: Efficient data organisation and processing
 - **Multithreaded processing**: Utilises all available CPU cores
-- **TUI dashboard**: Visualises compliance metrics as they're processed
+- **Web dashboard**: Visualises compliance metrics as they're processed
 - **Configurable rules**: Demonstrates different types of compliance checks
 - **Low memory footprint**: Components are kept small for cache efficiency
 
@@ -70,20 +70,6 @@ The system uses the Entity Component System (ECS) architecture:
     - Internal policy rules
     - Risk assessment
 
-## Dashboard Navigation
-
-The TUI dashboard provides four main views:
-
-- **Overview**: General statistics and processing rates
-- **Services**: Breakdown of AI service and vendor usage
-- **Compliance**: Compliance status and violations
-- **Risk**: Risk distribution and factors
-
-Navigation:
-- Press `1-4` to switch between tabs
-- Press `Tab` to cycle through tabs
-- Press `q` or `Esc` to exit
-
 ## Performance Notes
 
 The system is designed to demonstrate the theoretical limits of compliance rule processing. In a real-world implementation, additional factors like database writes, API calls, and network latency would impact performance.
@@ -97,11 +83,7 @@ The system is designed to demonstrate the theoretical limits of compliance rule 
 │   ├── constants.rs      - Shared constants
 │   ├── ecs.rs            - ECS systems and logic
 │   ├── metrics.rs        - Metrics collection and processing
-│   └── ui/
-│       ├── mod.rs        - UI module definition
-│       ├── dashboard.rs  - TUI dashboard implementation
-│       ├── tui.rs        - Terminal setup/teardown
-│       └── widgets.rs    - Reusable UI components
+│   └── web.rs            - Web server
 ├── Cargo.toml
 └── README.md
 ```
@@ -123,6 +105,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - The `hecs` ECS library
-- The `tui-rs` and `crossterm` libraries for terminal UI
 - The Rust game development community for ECS inspiration
 - The AIs that assisted with this piece of work: Claude 3.7, GPT o3-mini-high, GPT o1 and GPT-4
