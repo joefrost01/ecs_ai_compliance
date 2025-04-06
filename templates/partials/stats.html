@@ -1,0 +1,75 @@
+<div class="col-sm-6 col-lg-3">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex align-items-center">
+                <div class="subheader">Total Events</div>
+            </div>
+            <div class="h1 mb-3">{{ total_events|format_number }}</div>
+            <div class="d-flex mb-2">
+                <div>Processing rate</div>
+                <div class="ms-auto">
+          <span class="text-green d-inline-flex align-items-center lh-1">
+            {{ (processing_rate / 1000000)|round(1) }}M/s
+          </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="col-sm-6 col-lg-3">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex align-items-center">
+                <div class="subheader">EU AI Act Violations</div>
+            </div>
+            <div class="h1 mb-3">{{ eu_act_violations|format_number }}</div>
+            <div class="d-flex mb-2">
+                <div>Compliance rate</div>
+                <div class="ms-auto">
+          <span class="text-green d-inline-flex align-items-center lh-1">
+            {{ 100.0 - (eu_act_violations / total_events * 100.0)|round(1) if total_events > 0 else 100.0 }}%
+          </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="col-sm-6 col-lg-3">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex align-items-center">
+                <div class="subheader">GDPR Violations</div>
+            </div>
+            <div class="h1 mb-3">{{ gdpr_violations|format_number }}</div>
+            <div class="d-flex mb-2">
+                <div>Compliance rate</div>
+                <div class="ms-auto">
+          <span class="text-yellow d-inline-flex align-items-center lh-1">
+            {{ 100.0 - (gdpr_violations / total_events * 100.0)|round(1) if total_events > 0 else 100.0 }}%
+          </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="col-sm-6 col-lg-3">
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex align-items-center">
+                <div class="subheader">Internal Policy Violations</div>
+            </div>
+            <div class="h1 mb-3">{{ internal_violations|format_number }}</div>
+            <div class="d-flex mb-2">
+                <div>Compliance rate</div>
+                <div class="ms-auto">
+          <span class="text-green d-inline-flex align-items-center lh-1">
+            {{ 100.0 - (internal_violations / total_events * 100.0)|round(1) if total_events > 0 else 100.0 }}%
+          </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Compliance Dashboard</title>
+
+    <!-- Tabler CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/css/tabler.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.2/dist/htmx.min.js"></script>
+
+    <style>
+        /* Make the dashboard more compact */
+        .chart-container {
+            position: relative;
+            height: 200px; /* reduced chart height */
+            margin-bottom: 0.5rem;
+        }
+        .card {
+            margin-bottom: 0.5rem; /* less vertical space between cards */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .stats-value {
+            font-size: 1.5rem; /* slightly smaller font size */
+            font-weight: 600;
+        }
+        .stats-label {
+            font-size: 0.8rem; /* smaller label font */
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .compliance-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+        }
+        .high-compliance { background-color: #2FB344; }
+        .medium-compliance { background-color: #F59F00; }
+        .low-compliance { background-color: #D63939; }
+    </style>
+</head>
+<body>
+<div class="page">
+    <!-- Navbar -->
+    <header class="navbar navbar-expand-md navbar-light d-print-none">
+        <div class="container-xl">
+            <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
+                AI Compliance Dashboard
+            </h1>
+            <div class="d-flex">
+                <span class="badge bg-green me-2" id="compliance-percentage">{{ compliance_percentage|round(1) }}% Compliant</span>
+                <span class="badge bg-blue" id="event-rate">{{ (processing_rate / 1000000)|round(1) }}M events/sec</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="page-wrapper">
+        <div class="container-xl py-2">
+            <!-- Stats Row: Data is dynamically updated via the API and reflects ECS-processed metrics -->
+            <div class="row row-deck row-cards mb-2" id="stats-container" hx-get="/api/stats" hx-trigger="load, every 2s" hx-swap="innerHTML">
+                <!-- Total Events Card -->
+                <div class="col-sm-6 col-lg-3">
+                    <div class="card card-sm">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <div class="stats-label">Total Events</div>
+                                    <div class="stats-value">{{ total_events|format_number }}</div>
+                                    <div class="text-muted mt-1">
+                                        <span class="text-green">{{ (processing_rate / 1000000)|round(1) }}M/s</span> rate
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="bg-blue text-white p-1 rounded-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler" width="20" height="20" fill="none" stroke="currentColor">
+                                            <path d="M4 19l16 0"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- EU AI Act Violations Card -->
+                <div class="col-sm-6 col-lg-3">
+                    <div class="card card-sm">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <div class="stats-label">EU AI Act Violations</div>
+                                    <div class="stats-value">{{ eu_act_violations|format_number }}</div>
+                                    <div class="text-muted mt-1">
+                      <span class="text-green">
+                        {{ 100.0 - (eu_act_violations / total_events * 100.0)|round(1) if total_events > 0 else 100.0 }}%
+                      </span> compliance
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="bg-green text-white p-1 rounded-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler" width="20" height="20" fill="none" stroke="currentColor">
+                                            <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- GDPR Violations Card -->
+                <div class="col-sm-6 col-lg-3">
+                    <div class="card card-sm">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <div class="stats-label">GDPR Violations</div>
+                                    <div class="stats-value">{{ gdpr_violations|format_number }}</div>
+                                    <div class="text-muted mt-1">
+                      <span class="text-green">
+                        {{ 100.0 - (gdpr_violations / total_events * 100.0)|round(1) if total_events > 0 else 100.0 }}%
+                      </span> compliance
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="bg-yellow text-white p-1 rounded-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler" width="20" height="20" fill="none" stroke="currentColor">
+                                            <path d="M15 8h.01"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Internal Policy Violations Card -->
+                <div class="col-sm-6 col-lg-3">
+                    <div class="card card-sm">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <div class="stats-label">Internal Policy Violations</div>
+                                    <div class="stats-value">{{ internal_violations|format_number }}</div>
+                                    <div class="text-muted mt-1">
+                      <span class="text-green">
+                        {{ 100.0 - (internal_violations / total_events * 100.0)|round(1) if total_events > 0 else 100.0 }}%
+                      </span> compliance
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="bg-green text-white p-1 rounded-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler" width="20" height="20" fill="none" stroke="currentColor">
+                                            <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Analytics Row -->
+            <div class="row row-deck row-cards">
+                <!-- Risk Distribution Chart -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Risk Distribution</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="risk-distribution-chart"></canvas>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <div class="row text-center">
+                                <div class="col">
+                                    <div class="text-green fw-bold">{{ risk_distribution.low|round(1) }}%</div>
+                                    <div class="text-muted">Low Risk</div>
+                                </div>
+                                <div class="col">
+                                    <div class="text-yellow fw-bold">{{ risk_distribution.medium|round(1) }}%</div>
+                                    <div class="text-muted">Medium Risk</div>
+                                </div>
+                                <div class="col">
+                                    <div class="text-red fw-bold">{{ risk_distribution.high|round(1) }}%</div>
+                                    <div class="text-muted">High Risk</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processing Rate History Chart -->
+                <div class="col-md-6 col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Processing Rate History</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="processing-rate-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Additional sections (e.g., Compliance Analytics or Department Analysis) can be added here following a similar compact layout -->
+        </div>
+    </div>
+</div>
+
+<!-- Tabler JavaScript -->
+<script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta17/dist/js/tabler.min.js"></script>
+<script>
+    let riskChart, rateChart;
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Risk Distribution Doughnut Chart
+        const riskCtx = document.getElementById('risk-distribution-chart').getContext('2d');
+        riskChart = new Chart(riskCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Low Risk', 'Medium Risk', 'High Risk'],
+                datasets: [{
+                    data: [{{ risk_distribution.low }}, {{ risk_distribution.medium }}, {{ risk_distribution.high }}],
+        backgroundColor: ['#2FB344', '#F59F00', '#D63939']
+    }]
+    },
+        options: {
+            responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                legend: {
+                    position: 'bottom',
+                        labels: {
+                        usePointStyle: true,
+                            padding: 15
+                    }
+                }
+            }
+        }
+    });
+
+        // Initialize Processing Rate History Line Chart with dynamic labels.
+        const rateCtx = document.getElementById('processing-rate-chart').getContext('2d');
+        rateChart = new Chart(rateCtx, {
+            type: 'line',
+            data: {
+                labels: [], // will be generated dynamically
+                datasets: [{
+                    label: 'Million events/sec',
+                    data: [],
+                    borderColor: '#4299E1',
+                    tension: 0.3,
+                    fill: {
+                        target: 'origin',
+                        above: 'rgba(66, 153, 225, 0.1)'
+                    },
+                    pointRadius: 4,
+                    pointBackgroundColor: '#4299E1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        ticks: {
+                            autoSkip: true,
+                            maxTicksLimit: 10
+                        }
+                    },
+                    y: {
+                        beginAtZero: false
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.raw + ' million events/sec';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Update charts every 2 seconds.
+        setInterval(updateCharts, 2000);
+    });
+
+    function updateCharts() {
+        fetch('/api/dashboard', { cache: "no-cache" })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Dashboard data:", data);
+                // Update card values using snake_case keys.
+                if (data && typeof data.compliance_percentage !== 'undefined' && typeof data.processing_rate !== 'undefined') {
+                    document.getElementById('compliance-percentage').textContent =
+                        data.compliance_percentage.toFixed(1) + '% Compliant';
+                    document.getElementById('event-rate').textContent =
+                        data.processing_rate.toFixed(1) + 'M events/sec';
+                } else {
+                    console.warn("Dashboard data missing expected fields:", data);
+                }
+
+                // Update Risk Distribution Chart.
+                if (data && data.risk_distribution) {
+                    riskChart.data.datasets[0].data = [
+                        data.risk_distribution.low,
+                        data.risk_distribution.medium,
+                        data.risk_distribution.high
+                    ];
+                    riskChart.update();
+                }
+
+                // Update Processing Rate History Chart.
+                if (data && data.processing_rate_history) {
+                    const history = data.processing_rate_history;
+                    // Generate dynamic labels corresponding to the number of history values.
+                    rateChart.data.labels = history.map((_, index) => index + 1);
+                    rateChart.data.datasets[0].data = history;
+                    rateChart.update();
+                }
+            })
+            .catch(err => console.error("Error fetching dashboard data:", err));
+    }
+</script>
+</body>
+</html>

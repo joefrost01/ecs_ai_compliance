@@ -8,11 +8,13 @@ hecs = "0.10.5"
 clap = { version = "4.5.35", features = ["derive"] }
 rand = "0.9.0"
 crossbeam-channel = "0.5.14"
-tui = "0.19"
-crossterm = "0.28.1"
 ctrlc = "3.4.5"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter","json"] }
+axum = "0.8.3"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+minijinja = { version = "2.9.0", features = ["builtins"] }
 
 [profile.release]
 incremental = false

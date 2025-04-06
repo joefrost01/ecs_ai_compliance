@@ -1,15 +1,15 @@
+extern crate core;
+
 mod components;
 mod constants;
 mod ecs;
 mod metrics;
-mod ui;
-mod logging;
+mod web;
+
 
 use crate::components::Args;
 use crate::ecs::*;
 use crate::metrics::*;
-use crate::ui::dashboard::Dashboard;
-use crate::ui::tui::{setup_terminal, restore_terminal};
 
 use clap::Parser;
 use crossbeam_channel::unbounded;
@@ -19,13 +19,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use tracing::{error, info};
-use crate::logging::init_tracing;
+use tokio::sync::RwLock;
+use tracing::{error, info, Level};
+use tracing_subscriber::EnvFilter;
 
-/// Main entry point for the AI Compliance ECS Demo application.
 fn main() -> io::Result<()> {
-    init_tracing();
-    // Parse command line arguments.
+    // Init the logging
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(Level::INFO)
+        .with_target(true)
+        .with_thread_ids(false)
+        .with_env_filter(EnvFilter::new("info"));
+    subscriber.init();
+
+    // Parse command line arguments
     let args = Args::parse();
 
     // Determine optimal thread count based on event rate
@@ -43,9 +50,8 @@ fn main() -> io::Result<()> {
     info!("Using {} worker threads", thread_count);
     info!("Reporting interval: {} seconds", args.interval);
 
-    // Calculate events per thread and per batch with more efficient batching
+    // Calculate events per thread and batch with more efficient batching
     let events_per_thread = args.rate as usize / thread_count;
-    // Higher minimum batch size for efficiency
     let min_batch_size = 10;
     let events_per_batch = std::cmp::max(min_batch_size, events_per_thread / 10);
 
@@ -65,16 +71,17 @@ fn main() -> io::Result<()> {
                  1000
              });
 
-    info!("Starting TUI dashboard...");
-
-    // Set up channels for metrics reporting and dashboard commands.
+    // Set up channels for metrics reporting
     let (metrics_sender, metrics_receiver) = unbounded();
-    let (cmd_sender, cmd_receiver) = unbounded();
 
-    // Set up a stop signal for graceful shutdown.
+    // Set up a stop signal for graceful shutdown
     let stop_signal = Arc::new(AtomicBool::new(false));
 
-    // Launch worker threads.
+    // Create a shared metrics object for the web dashboard
+    let shared_metrics = Arc::new(RwLock::new(ComplianceMetrics::default()));
+    let web_metrics = shared_metrics.clone();
+
+    // Launch worker threads
     let mut worker_handles = Vec::with_capacity(thread_count);
     for thread_id in 0..thread_count {
         let thread_sender = metrics_sender.clone();
@@ -94,49 +101,39 @@ fn main() -> io::Result<()> {
         worker_handles.push(handle);
     }
 
-    // Metrics aggregation variables.
+    // Launch web dashboard in a separate async runtime
+    let web_stop = Arc::clone(&stop_signal);  // Use Arc::clone to be explicit
+    let web_metrics_clone = Arc::clone(&web_metrics);
+    let web_handle = thread::spawn(move || {
+        // Create a new tokio runtime for the web server
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            // Create a future that resolves when stop signal is set
+            let web_stop_captured = Arc::clone(&web_stop); // Capture in async block
+            let shutdown_signal = async move {
+                while !web_stop_captured.load(Ordering::Relaxed) {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
+            };
+
+            // Start the web dashboard
+            web::start_server(web_metrics_clone, shutdown_signal).await;
+        });
+    });
+
+    // Metrics aggregation variables
     let mut total_metrics = ComplianceMetrics::default();
     let mut last_report_time = Instant::now();
     let mut metrics_since_last = ComplianceMetrics::default();
 
-    // Set up Ctrl+C handler for graceful shutdown.
+    // Set up Ctrl+C handler for graceful shutdown
     let ctrl_c_stop = stop_signal.clone();
     ctrlc::set_handler(move || {
         info!("Received Ctrl+C, shutting down gracefully...");
         ctrl_c_stop.store(true, Ordering::Relaxed);
     }).expect("Error setting Ctrl+C handler");
 
-    // Launch the TUI dashboard in a separate thread.
-    let dashboard_stop = stop_signal.clone();
-    let dashboard_handle = thread::spawn(move || {
-        let mut terminal = setup_terminal().expect("Failed to setup terminal");
-        let mut dashboard = Dashboard::new();
-        while !dashboard_stop.load(Ordering::Relaxed) && !dashboard.should_quit {
-            // Process incoming dashboard commands.
-            while let Ok(cmd) = cmd_receiver.try_recv() {
-                dashboard.handle_command(cmd);
-            }
-            // Render the dashboard UI.
-            if let Err(e) = dashboard.render(&mut terminal) {
-                error!("Dashboard render error: {:?}", e);
-            }
-            // Poll for key events with a timeout.
-            if crossterm::event::poll(Duration::from_millis(250)).unwrap_or(false) {
-                if let crossterm::event::Event::Key(key) = crossterm::event::read().unwrap() {
-                    dashboard.handle_key_event(key);
-                    if dashboard.should_quit {
-                        dashboard_stop.store(true, Ordering::Relaxed);
-                    }
-                }
-            }
-        }
-        // Restore terminal settings upon exit.
-        if let Err(e) = restore_terminal(&mut terminal) {
-            error!("Error restoring terminal: {:?}", e);
-        }
-    });
-
-    // Main loop: aggregate metrics and send dashboard updates.
+    // Main loop: aggregate metrics and update shared state
     while !stop_signal.load(Ordering::Relaxed) {
         while let Ok(metrics) = metrics_receiver.try_recv() {
             total_metrics.merge(&metrics);
@@ -146,10 +143,18 @@ fn main() -> io::Result<()> {
         if last_report_time.elapsed() >= Duration::from_secs(args.interval) {
             let elapsed = last_report_time.elapsed();
 
+            // Calculate and print the actual processing rate
+            let events_per_sec = metrics_since_last.total_events as f64 / elapsed.as_secs_f64();
+            info!("Processing rate: {:.2} events/second ({:.2}M/s)",
+                     events_per_sec,
+                     events_per_sec / 1_000_000.0);
+
+            // Update metrics
             total_metrics.update_historical_data(metrics_since_last.total_events, elapsed);
 
-            if let Err(e) = cmd_sender.send(ui::dashboard::DashboardCommand::UpdateMetrics(total_metrics.clone())) {
-                error!("Error sending dashboard command: {:?}", e);
+            // Update shared metrics for web dashboard
+            if let Ok(mut web_metrics_guard) = shared_metrics.try_write() {
+                *web_metrics_guard = total_metrics.clone();
             }
 
             last_report_time = Instant::now();
@@ -160,12 +165,10 @@ fn main() -> io::Result<()> {
         thread::sleep(Duration::from_millis(50));
     }
 
-    info!("Waiting for dashboard thread to finish...");
-    // Wait for the dashboard thread to finish.
-    dashboard_handle.join().expect("Dashboard thread panicked");
+    info!("Waiting for web dashboard to shut down...");
+    web_handle.join().expect("Web dashboard thread panicked");
 
     info!("Waiting for worker threads to finish...");
-    // Wait for all worker threads to finish.
     for (i, handle) in worker_handles.into_iter().enumerate() {
         if let Err(e) = handle.join() {
             error!("Worker thread {} panicked: {:?}", i, e);
