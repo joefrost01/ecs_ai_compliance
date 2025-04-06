@@ -125,3 +125,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - The `hecs` ECS library
 - The `tui-rs` and `crossterm` libraries for terminal UI
 - The Rust game development community for ECS inspiration
+- The AIs that assisted with this piece of work: Claude 3.7, GPT o3-mini-high, GPT o1 and GPT-4
