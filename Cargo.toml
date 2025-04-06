@@ -11,6 +11,8 @@ crossbeam-channel = "0.5.14"
 tui = "0.19"
 crossterm = "0.28.1"
 ctrlc = "3.4.5"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3", features = ["env-filter","json"] }
 
 [profile.release]
 incremental = false

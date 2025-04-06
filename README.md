@@ -4,14 +4,14 @@ A high-performance ECS-based system for monitoring AI service usage compliance i
 
 ## Overview
 
-This project demonstrates how Entity Component System (ECS) architecture, traditionally used in game development, can be applied to create blazingly fast AI compliance monitoring pipelines. The system processes AI service usage events, applies compliance rules (EU AI Act, GDPR, internal policies), and provides real-time metrics through a terminal-based dashboard.
+This project demonstrates how Entity Component System (ECS) architecture, traditionally used in game development, can be applied to create very fast AI compliance monitoring pipelines. The system processes AI service usage events, applies compliance rules (EU AI Act, GDPR, internal policies), and provides real-time metrics through a terminal-based dashboard.
 
 ## Features
 
-- **Ultra-high performance**: Processes 70+ million AI service usage events per second
-- **ECS architecture**: Efficient data organization and processing
-- **Multi-threaded processing**: Utilizes all available CPU cores
-- **Real-time TUI dashboard**: Visualizes compliance metrics as they're processed
+- **Ultra-high performance**: Processes 90+ million AI service usage events per second on M2-Max
+- **ECS architecture**: Efficient data organisation and processing
+- **Multithreaded processing**: Utilises all available CPU cores
+- **TUI dashboard**: Visualises compliance metrics as they're processed
 - **Configurable rules**: Demonstrates different types of compliance checks
 - **Low memory footprint**: Components are kept small for cache efficiency
 

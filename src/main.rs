@@ -3,6 +3,7 @@ mod constants;
 mod ecs;
 mod metrics;
 mod ui;
+mod logging;
 
 use crate::components::Args;
 use crate::ecs::*;
@@ -18,9 +19,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+use tracing::{error, info};
+use crate::logging::init_tracing;
 
 /// Main entry point for the AI Compliance ECS Demo application.
 fn main() -> io::Result<()> {
+    init_tracing();
     // Parse command line arguments.
     let args = Args::parse();
 
@@ -34,10 +38,10 @@ fn main() -> io::Result<()> {
         std::cmp::max(1, (args.rate as usize + 999) / 1000) // Use at most 1 thread per 1000 events/sec
     );
 
-    println!("AI Compliance ECS Demo");
-    println!("Target processing rate: {} events/second", args.rate);
-    println!("Using {} worker threads", thread_count);
-    println!("Reporting interval: {} seconds", args.interval);
+    info!("AI Compliance ECS Demo");
+    info!("Target processing rate: {} events/second", args.rate);
+    info!("Using {} worker threads", thread_count);
+    info!("Reporting interval: {} seconds", args.interval);
 
     // Calculate events per thread and per batch with more efficient batching
     let events_per_thread = args.rate as usize / thread_count;
@@ -52,7 +56,7 @@ fn main() -> io::Result<()> {
         args.rate
     };
 
-    println!("Events per thread: {}/sec, Events per batch: {}, Batch time target: {} ms",
+    info!("Events per thread: {}/sec, Events per batch: {}, Batch time target: {} ms",
              events_per_sec_per_thread,
              events_per_batch,
              if events_per_sec_per_thread > 0 {
@@ -61,7 +65,7 @@ fn main() -> io::Result<()> {
                  1000
              });
 
-    println!("Starting TUI dashboard...");
+    info!("Starting TUI dashboard...");
 
     // Set up channels for metrics reporting and dashboard commands.
     let (metrics_sender, metrics_receiver) = unbounded();
@@ -76,7 +80,7 @@ fn main() -> io::Result<()> {
         let thread_sender = metrics_sender.clone();
         let thread_stop = stop_signal.clone();
 
-        println!("Starting worker thread {} with rate {}/sec", thread_id, events_per_sec_per_thread);
+        info!("Starting worker thread {} with rate {}/sec", thread_id, events_per_sec_per_thread);
 
         let handle = thread::spawn(move || {
             worker_thread(
@@ -98,7 +102,7 @@ fn main() -> io::Result<()> {
     // Set up Ctrl+C handler for graceful shutdown.
     let ctrl_c_stop = stop_signal.clone();
     ctrlc::set_handler(move || {
-        println!("Received Ctrl+C, shutting down gracefully...");
+        info!("Received Ctrl+C, shutting down gracefully...");
         ctrl_c_stop.store(true, Ordering::Relaxed);
     }).expect("Error setting Ctrl+C handler");
 
@@ -114,7 +118,7 @@ fn main() -> io::Result<()> {
             }
             // Render the dashboard UI.
             if let Err(e) = dashboard.render(&mut terminal) {
-                eprintln!("Dashboard render error: {:?}", e);
+                error!("Dashboard render error: {:?}", e);
             }
             // Poll for key events with a timeout.
             if crossterm::event::poll(Duration::from_millis(250)).unwrap_or(false) {
@@ -128,7 +132,7 @@ fn main() -> io::Result<()> {
         }
         // Restore terminal settings upon exit.
         if let Err(e) = restore_terminal(&mut terminal) {
-            eprintln!("Error restoring terminal: {:?}", e);
+            error!("Error restoring terminal: {:?}", e);
         }
     });
 
@@ -145,7 +149,7 @@ fn main() -> io::Result<()> {
             total_metrics.update_historical_data(metrics_since_last.total_events, elapsed);
 
             if let Err(e) = cmd_sender.send(ui::dashboard::DashboardCommand::UpdateMetrics(total_metrics.clone())) {
-                eprintln!("Error sending dashboard command: {:?}", e);
+                error!("Error sending dashboard command: {:?}", e);
             }
 
             last_report_time = Instant::now();
@@ -156,18 +160,18 @@ fn main() -> io::Result<()> {
         thread::sleep(Duration::from_millis(50));
     }
 
-    println!("Waiting for dashboard thread to finish...");
+    info!("Waiting for dashboard thread to finish...");
     // Wait for the dashboard thread to finish.
     dashboard_handle.join().expect("Dashboard thread panicked");
 
-    println!("Waiting for worker threads to finish...");
+    info!("Waiting for worker threads to finish...");
     // Wait for all worker threads to finish.
     for (i, handle) in worker_handles.into_iter().enumerate() {
         if let Err(e) = handle.join() {
-            eprintln!("Worker thread {} panicked: {:?}", i, e);
+            error!("Worker thread {} panicked: {:?}", i, e);
         }
     }
 
-    println!("Shutdown complete.");
+    info!("Shutdown complete.");
     Ok(())
 }
